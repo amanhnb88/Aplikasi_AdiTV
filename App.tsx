@@ -114,6 +114,9 @@ const BerandaScreen = ({ isTV }: { isTV?: boolean }) => (
 const CloudstreamScreen = () => {
   const [plugins, setPlugins] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // State untuk mengingat nama plugin yang sudah didownload
+  const [downloadedPlugins, setDownloadedPlugins] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchRepo = async () => {
@@ -138,34 +141,54 @@ const CloudstreamScreen = () => {
         <ActivityIndicator size="large" color={THEME.active} style={{ marginTop: 50 }} />
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 10 }}>
-          {plugins.map((plugin, index) => (
-            <View key={index} style={styles.pluginCard}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.pluginName}>{plugin.name}</Text>
-                <Text style={styles.pluginAuthor}>Oleh: {plugin.authors?.join(', ') || 'Anonim'}</Text>
-                <Text style={styles.pluginDesc}>{plugin.description}</Text>
+          {plugins.map((plugin, index) => {
+            // Cek apakah plugin ini ada di dalam daftar "sudah didownload"
+            const isDownloaded = downloadedPlugins.includes(plugin.name);
+
+            return (
+              <View key={index} style={styles.pluginCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pluginName}>{plugin.name}</Text>
+                  <Text style={styles.pluginAuthor}>Oleh: {plugin.authors?.join(', ') || 'Anonim'}</Text>
+                  <Text style={styles.pluginDesc}>{plugin.description}</Text>
+                </View>
+                
+                {/* TOMBOL DINAMIS (DOWNLOAD / DELETE) */}
+                <TouchableOpacity 
+                  style={isDownloaded ? styles.btnDelete : styles.btnDownload}
+                  onPress={async () => {
+                    // JIKA SUDAH DIDOWNLOAD -> HAPUS
+                    if (isDownloaded) {
+                      setDownloadedPlugins(prev => prev.filter(p => p !== plugin.name));
+                      Alert.alert("Dihapus", `Plugin ${plugin.name} telah dihapus/dinonaktifkan.`);
+                      return;
+                    }
+
+                    // JIKA BELUM DIDOWNLOAD -> PROSES DOWNLOAD (KOTLIN)
+                    try {
+                      const fileName = plugin.url.split('/').pop(); 
+                      const pluginUrl = `https://raw.githubusercontent.com/bikinveo-hash/RepairPremium_Repo/builds/${fileName}`;
+                      
+                      const responKotlin = await Cloudstream.loadPlugin(plugin.name, pluginUrl);
+                      
+                      // Masukkan nama plugin ke daftar ingatan (State)
+                      setDownloadedPlugins(prev => [...prev, plugin.name]);
+                      Alert.alert("Sukses!", responKotlin);
+                    } catch (e: any) {
+                      Alert.alert("Gagal Download", e.message || "Gagal menghubungkan ke Android");
+                    }
+                  }}
+                >
+                  {/* Ikon berubah dari Awan menjadi Tong Sampah */}
+                  <Icon 
+                    name={isDownloaded ? "trash-outline" : "cloud-download-outline"} 
+                    size={22} 
+                    color={isDownloaded ? "#FFFFFF" : "#FFFFFF"} 
+                  />
+                </TouchableOpacity>
               </View>
-              {/* TOMBOL DOWNLOAD DENGAN NATIVE MODULES KOTLIN */}
-              <TouchableOpacity 
-                style={styles.btnDownload}
-                onPress={async () => {
-                  try {
-                    // MENGGUNAKAN URL ASLI DARI JSON TANPA MODIFIKASI
-                    const pluginUrl = plugin.url;
-                    
-                    Alert.alert("Memulai...", `Mengambil ${plugin.name}`);
-                    
-                    const responKotlin = await Cloudstream.loadPlugin(plugin.name, pluginUrl);
-                    Alert.alert("Sukses!", responKotlin);
-                  } catch (e: any) {
-                    Alert.alert("Error", e.message || "Gagal menghubungkan ke Android");
-                  }
-                }}
-              >
-                <Icon name="cloud-download-outline" size={20} color="#FFF" />
-              </TouchableOpacity>
-            </View>
-          ))}
+            );
+          })}
           <View style={{ height: 100 }} />
         </ScrollView>
       )}
@@ -317,7 +340,12 @@ const styles = StyleSheet.create({
   pluginName: { color: THEME.text, fontSize: 16, fontWeight: 'bold' },
   pluginAuthor: { color: THEME.active, fontSize: 12, marginTop: 2, marginBottom: 5 },
   pluginDesc: { color: THEME.textMuted, fontSize: 12, lineHeight: 18 },
-  btnDownload: { backgroundColor: THEME.primary, padding: 12, borderRadius: 8, marginLeft: 15 },
+  
+  // Style Tombol Download (Awan biru)
+  btnDownload: { backgroundColor: THEME.primary, padding: 12, borderRadius: 8, marginLeft: 15, width: 45, alignItems: 'center' },
+  
+  // Style Tombol Delete (Tong sampah transparan)
+  btnDelete: { backgroundColor: 'transparent', padding: 12, borderRadius: 8, marginLeft: 15, width: 45, alignItems: 'center' },
 
   tvContainer: { flex: 1, flexDirection: 'row', backgroundColor: THEME.bg },
   tvSidebar: { width: 240, backgroundColor: THEME.sidebarBg, paddingTop: 40, borderRightWidth: 1, borderColor: '#1A2230' },

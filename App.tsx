@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Platform, StatusBar, TouchableOpacity, ScrollView, ImageBackground, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Platform, StatusBar, TouchableOpacity, ScrollView, ImageBackground, ActivityIndicator, NativeModules, Alert } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
+
+// Memanggil jembatan Native Module Android (Kotlin)
+const { Cloudstream } = NativeModules;
 
 // --- TEMA WARNA ---
 const THEME = {
@@ -21,7 +24,6 @@ const THEME = {
 const BerandaScreen = ({ isTV }: { isTV?: boolean }) => (
   <ScrollView style={styles.screenContainer} showsVerticalScrollIndicator={false}>
     
-    {/* Kategori Atas (Khusus Mobile) */}
     {!isTV && (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
         {['Beranda', 'Live TV', 'Film', 'Series', 'Favorit'].map((cat, idx) => (
@@ -32,7 +34,6 @@ const BerandaScreen = ({ isTV }: { isTV?: boolean }) => (
       </ScrollView>
     )}
 
-    {/* Header Atas (Khusus TV) */}
     {isTV && (
       <View style={styles.tvTopBar}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -49,7 +50,6 @@ const BerandaScreen = ({ isTV }: { isTV?: boolean }) => (
       </View>
     )}
 
-    {/* Banner Monas */}
     <ImageBackground 
       source={{ uri: 'https://images.unsplash.com/photo-1555899434-94d1368aa7af?q=80&w=1000&auto=format&fit=crop' }} 
       style={[styles.banner, isTV ? { height: 350 } : { height: 220 }]}
@@ -75,7 +75,6 @@ const BerandaScreen = ({ isTV }: { isTV?: boolean }) => (
       </View>
     </ImageBackground>
 
-    {/* Siaran Nasional */}
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>Siaran Nasional</Text>
       <Text style={styles.seeAll}>Lihat Semua {'>'}</Text>
@@ -88,7 +87,6 @@ const BerandaScreen = ({ isTV }: { isTV?: boolean }) => (
       ))}
     </ScrollView>
 
-    {/* Sedang Tayang */}
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>Sedang Tayang</Text>
       <Text style={styles.seeAll}>Lihat Semua {'>'}</Text>
@@ -120,7 +118,6 @@ const CloudstreamScreen = () => {
   useEffect(() => {
     const fetchRepo = async () => {
       try {
-        // Mengambil daftar plugin dari GitHub
         const response = await fetch('https://raw.githubusercontent.com/bikinveo-hash/RepairPremium_Repo/builds/plugins.json');
         const data = await response.json();
         setPlugins(data);
@@ -148,7 +145,20 @@ const CloudstreamScreen = () => {
                 <Text style={styles.pluginAuthor}>Oleh: {plugin.authors?.join(', ') || 'Anonim'}</Text>
                 <Text style={styles.pluginDesc}>{plugin.description}</Text>
               </View>
-              <TouchableOpacity style={styles.btnDownload}>
+              {/* TOMBOL DOWNLOAD DENGAN NATIVE MODULES KOTLIN */}
+              <TouchableOpacity 
+                style={styles.btnDownload}
+                onPress={async () => {
+                  try {
+                    const pluginUrl = `https://raw.githubusercontent.com/bikinveo-hash/RepairPremium_Repo/builds/${plugin.url}`;
+                    // Memanggil fungsi loadPlugin dari Kotlin (Jembatan berhasil!)
+                    const responKotlin = await Cloudstream.loadPlugin(plugin.name, pluginUrl);
+                    Alert.alert("Status", responKotlin);
+                  } catch (e: any) {
+                    Alert.alert("Error", e.message || "Gagal menghubungkan ke Android");
+                  }
+                }}
+              >
                 <Icon name="cloud-download-outline" size={20} color="#FFF" />
               </TouchableOpacity>
             </View>
@@ -160,7 +170,7 @@ const CloudstreamScreen = () => {
   );
 };
 
-// Komponen Halaman Kosong (Placeholder)
+// Komponen Halaman Kosong
 const DummyScreen = ({ title }: { title: string }) => (
   <View style={[styles.screenContainer, { justifyContent: 'center', alignItems: 'center' }]}>
     <Text style={styles.bannerTitle}>{title}</Text>
@@ -173,7 +183,7 @@ const TVLayout = () => {
   const menus = [
     { name: 'Home', icon: 'home' },
     { name: 'Live TV', icon: 'tv-outline' },
-    { name: 'Search', icon: 'search-outline' }, // Search dipakai untuk Cloudstream
+    { name: 'Plugin', icon: 'extension-puzzle-outline' }, 
     { name: 'Movies', icon: 'film-outline' },
     { name: 'Series', icon: 'layers-outline' },
     { name: 'Favorites', icon: 'heart-outline' },
@@ -208,7 +218,7 @@ const TVLayout = () => {
 
       <View style={{ flex: 1 }}>
         {active === 'Home' ? <BerandaScreen isTV={true} /> : 
-         active === 'Search' ? <CloudstreamScreen /> : 
+         active === 'Plugin' ? <CloudstreamScreen /> : 
          <DummyScreen title={active} />}
       </View>
     </View>
@@ -267,7 +277,6 @@ const styles = StyleSheet.create({
   
   screenContainer: { flex: 1, backgroundColor: THEME.bg, paddingHorizontal: 20 },
   
-  // Mobile Header & Pills
   mobileHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15 },
   categoryScroll: { maxHeight: 40, marginBottom: 15 },
   categoryPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 10 },
@@ -275,10 +284,8 @@ const styles = StyleSheet.create({
   categoryText: { color: THEME.textMuted, fontSize: 14, fontWeight: '600' },
   categoryTextActive: { color: THEME.text },
 
-  // TV Top Bar
   tvTopBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 30 },
 
-  // Banner
   banner: { justifyContent: 'center', marginBottom: 25, borderRadius: 16, overflow: 'hidden', backgroundColor: '#1A2230' },
   bannerContent: { padding: 25, flex: 1, justifyContent: 'center' },
   bannerBadge: { backgroundColor: THEME.red, color: THEME.text, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, fontSize: 10, fontWeight: '900', marginBottom: 15 },
@@ -288,13 +295,11 @@ const styles = StyleSheet.create({
   btnSecondary: { backgroundColor: 'rgba(255,255,255,0.1)', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
   btnText: { color: THEME.text, fontWeight: 'bold', fontSize: 14 },
 
-  // Sections
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   sectionTitle: { color: THEME.text, fontSize: 18, fontWeight: 'bold' },
   seeAll: { color: THEME.textMuted, fontSize: 12 },
   horizontalScroll: { paddingBottom: 20 },
 
-  // Cards
   cardChannelWhite: { backgroundColor: '#F0F0F0', width: 110, height: 80, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   channelLogoText: { color: '#000', fontSize: 22, fontWeight: '900', fontStyle: 'italic' },
   
@@ -305,14 +310,12 @@ const styles = StyleSheet.create({
   progressBarBg: { height: 3, backgroundColor: '#333', borderRadius: 2 },
   progressBarFill: { width: '60%', height: '100%', backgroundColor: THEME.active, borderRadius: 2 },
 
-  // Plugin Cards
   pluginCard: { backgroundColor: THEME.cardBg, padding: 15, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', borderColor: '#1A2230', borderWidth: 1 },
   pluginName: { color: THEME.text, fontSize: 16, fontWeight: 'bold' },
   pluginAuthor: { color: THEME.active, fontSize: 12, marginTop: 2, marginBottom: 5 },
   pluginDesc: { color: THEME.textMuted, fontSize: 12, lineHeight: 18 },
   btnDownload: { backgroundColor: THEME.primary, padding: 12, borderRadius: 8, marginLeft: 15 },
 
-  // TV Sidebar
   tvContainer: { flex: 1, flexDirection: 'row', backgroundColor: THEME.bg },
   tvSidebar: { width: 240, backgroundColor: THEME.sidebarBg, paddingTop: 40, borderRightWidth: 1, borderColor: '#1A2230' },
   tvLogoArea: { paddingLeft: 30, marginBottom: 40 },

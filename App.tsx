@@ -150,10 +150,13 @@ const CloudstreamScreen = () => {
                 style={styles.btnDownload}
                 onPress={async () => {
                   try {
-                    const pluginUrl = `https://raw.githubusercontent.com/bikinveo-hash/RepairPremium_Repo/builds/${plugin.url}`;
-                    // Memanggil fungsi loadPlugin dari Kotlin (Jembatan berhasil!)
+                    // MENGGUNAKAN URL ASLI DARI JSON TANPA MODIFIKASI
+                    const pluginUrl = plugin.url;
+                    
+                    Alert.alert("Memulai...", `Mengambil ${plugin.name}`);
+                    
                     const responKotlin = await Cloudstream.loadPlugin(plugin.name, pluginUrl);
-                    Alert.alert("Status", responKotlin);
+                    Alert.alert("Sukses!", responKotlin);
                   } catch (e: any) {
                     Alert.alert("Error", e.message || "Gagal menghubungkan ke Android");
                   }

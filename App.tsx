@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Platform, StatusBar, TouchableOpacity, ScrollView, ImageBackground, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Platform, StatusBar, TouchableOpacity, ScrollView, ImageBackground, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
 
+// --- TEMA WARNA ---
 const THEME = {
   bg: '#050B14',
   cardBg: '#111A2E',
@@ -49,7 +50,6 @@ const BerandaScreen = ({ isTV }: { isTV?: boolean }) => (
     )}
 
     {/* Banner Monas */}
-    {/* Menggunakan URL gambar Monas dummy agar mirip dengan desain */}
     <ImageBackground 
       source={{ uri: 'https://images.unsplash.com/photo-1555899434-94d1368aa7af?q=80&w=1000&auto=format&fit=crop' }} 
       style={[styles.banner, isTV ? { height: 350 } : { height: 220 }]}
@@ -97,26 +97,74 @@ const BerandaScreen = ({ isTV }: { isTV?: boolean }) => (
       {['TVRI Nasional', 'RCTI', 'MNCTV', 'GTV'].map((ch) => (
         <View key={ch} style={styles.cardLive}>
           <Text style={styles.liveBadgeSmall}>LIVE</Text>
-          {/* Mockup Logo */}
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
              <Text style={{ color: THEME.primary, fontSize: 24, fontWeight: 'bold' }}>{ch.split(' ')[0]}</Text>
           </View>
           <Text style={styles.liveTitle}>{ch}</Text>
           <Text style={styles.liveTime}>19:00 - 21:30</Text>
-          {/* Progress Bar */}
           <View style={styles.progressBarBg}>
             <View style={styles.progressBarFill} />
           </View>
         </View>
       ))}
     </ScrollView>
-    
     <View style={{ height: 50 }} />
   </ScrollView>
 );
 
+// --- KOMPONEN CLOUDSTREAM REPO ---
+const CloudstreamScreen = () => {
+  const [plugins, setPlugins] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRepo = async () => {
+      try {
+        // Mengambil daftar plugin dari GitHub
+        const response = await fetch('https://raw.githubusercontent.com/bikinveo-hash/RepairPremium_Repo/builds/plugins.json');
+        const data = await response.json();
+        setPlugins(data);
+        setLoading(false);
+      } catch (error) {
+        console.error("Gagal mengambil data plugin:", error);
+        setLoading(false);
+      }
+    };
+    fetchRepo();
+  }, []);
+
+  return (
+    <View style={styles.screenContainer}>
+      <Text style={styles.sectionTitle}>Repositori Plugin Cloudstream</Text>
+      
+      {loading ? (
+        <ActivityIndicator size="large" color={THEME.active} style={{ marginTop: 50 }} />
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 10 }}>
+          {plugins.map((plugin, index) => (
+            <View key={index} style={styles.pluginCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.pluginName}>{plugin.name}</Text>
+                <Text style={styles.pluginAuthor}>Oleh: {plugin.authors?.join(', ') || 'Anonim'}</Text>
+                <Text style={styles.pluginDesc}>{plugin.description}</Text>
+              </View>
+              <TouchableOpacity style={styles.btnDownload}>
+                <Icon name="cloud-download-outline" size={20} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          ))}
+          <View style={{ height: 100 }} />
+        </ScrollView>
+      )}
+    </View>
+  );
+};
+
+// Komponen Halaman Kosong (Placeholder)
 const DummyScreen = ({ title }: { title: string }) => (
-  <View style={[styles.screenContainer, { justifyContent: 'center', alignItems: 'center' }]}><Text style={styles.bannerTitle}>{title}</Text></View>
+  <View style={[styles.screenContainer, { justifyContent: 'center', alignItems: 'center' }]}>
+    <Text style={styles.bannerTitle}>{title}</Text>
+  </View>
 );
 
 // --- 📺 LAYOUT ANDROID TV ---
@@ -125,11 +173,10 @@ const TVLayout = () => {
   const menus = [
     { name: 'Home', icon: 'home' },
     { name: 'Live TV', icon: 'tv-outline' },
+    { name: 'Search', icon: 'search-outline' }, // Search dipakai untuk Cloudstream
     { name: 'Movies', icon: 'film-outline' },
     { name: 'Series', icon: 'layers-outline' },
-    { name: 'TV Guide', icon: 'calendar-outline' },
     { name: 'Favorites', icon: 'heart-outline' },
-    { name: 'Recordings', icon: 'radio-button-on-outline' },
     { name: 'Settings', icon: 'settings-outline' },
   ];
 
@@ -160,7 +207,9 @@ const TVLayout = () => {
       </View>
 
       <View style={{ flex: 1 }}>
-        {active === 'Home' ? <BerandaScreen isTV={true} /> : <DummyScreen title={active} />}
+        {active === 'Home' ? <BerandaScreen isTV={true} /> : 
+         active === 'Search' ? <CloudstreamScreen /> : 
+         <DummyScreen title={active} />}
       </View>
     </View>
   );
@@ -186,10 +235,10 @@ const MobileLayout = () => (
           tabBarStyle: { backgroundColor: THEME.sidebarBg, borderTopColor: '#1A2230', height: 65, paddingBottom: 10, paddingTop: 10 },
           tabBarActiveTintColor: THEME.active,
           tabBarInactiveTintColor: THEME.textMuted,
-          tabBarIcon: ({ color, size }) => {
+          tabBarIcon: ({ color }) => {
             let iconName = 'home';
             if (route.name === 'Live TV') iconName = 'tv-outline';
-            if (route.name === 'Cari') iconName = 'search';
+            if (route.name === 'Plugin') iconName = 'extension-puzzle-outline';
             if (route.name === 'Download') iconName = 'download-outline';
             if (route.name === 'Akun') iconName = 'person-outline';
             return <Icon name={iconName} size={24} color={color} />;
@@ -198,7 +247,7 @@ const MobileLayout = () => (
       >
         <Tab.Screen name="Beranda" component={BerandaScreen} />
         <Tab.Screen name="Live TV" children={() => <DummyScreen title="Live TV" />} />
-        <Tab.Screen name="Cari" children={() => <DummyScreen title="Cari" />} />
+        <Tab.Screen name="Plugin" component={CloudstreamScreen} />
         <Tab.Screen name="Download" children={() => <DummyScreen title="Download" />} />
         <Tab.Screen name="Akun" children={() => <DummyScreen title="Akun" />} />
       </Tab.Navigator>
@@ -206,6 +255,7 @@ const MobileLayout = () => (
   </SafeAreaView>
 );
 
+// --- 🚀 ROOT APP ---
 export default function App() {
   return <SafeAreaProvider>{Platform.isTV ? <TVLayout /> : <MobileLayout />}</SafeAreaProvider>;
 }
@@ -254,6 +304,13 @@ const styles = StyleSheet.create({
   liveTime: { color: THEME.textMuted, fontSize: 10, marginTop: 2, marginBottom: 8 },
   progressBarBg: { height: 3, backgroundColor: '#333', borderRadius: 2 },
   progressBarFill: { width: '60%', height: '100%', backgroundColor: THEME.active, borderRadius: 2 },
+
+  // Plugin Cards
+  pluginCard: { backgroundColor: THEME.cardBg, padding: 15, borderRadius: 12, marginBottom: 15, flexDirection: 'row', alignItems: 'center', borderColor: '#1A2230', borderWidth: 1 },
+  pluginName: { color: THEME.text, fontSize: 16, fontWeight: 'bold' },
+  pluginAuthor: { color: THEME.active, fontSize: 12, marginTop: 2, marginBottom: 5 },
+  pluginDesc: { color: THEME.textMuted, fontSize: 12, lineHeight: 18 },
+  btnDownload: { backgroundColor: THEME.primary, padding: 12, borderRadius: 8, marginLeft: 15 },
 
   // TV Sidebar
   tvContainer: { flex: 1, flexDirection: 'row', backgroundColor: THEME.bg },

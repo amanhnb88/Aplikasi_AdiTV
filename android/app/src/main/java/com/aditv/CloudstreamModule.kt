@@ -23,23 +23,24 @@ class CloudstreamModule(reactContext: ReactApplicationContext) : ReactContextBas
     fun loadPlugin(pluginName: String, pluginUrl: String, promise: Promise) {
         Log.d("Cloudstream", "Mulai proses download plugin: $pluginName")
         
-        // Kita jalankan di thread terpisah agar aplikasi tidak freeze/nge-hang saat download
         thread {
             try {
-                // 1. Siapkan folder tujuan di memori internal aplikasi
                 val pluginDir = File(reactApplicationContext.filesDir, "plugins")
                 if (!pluginDir.exists()) pluginDir.mkdirs()
                 
                 val outputFile = File(pluginDir, "$pluginName.cs3")
 
-                // 2. Proses Download File .cs3
                 val url = URL(pluginUrl)
                 val connection = url.openConnection() as HttpURLConnection
                 connection.requestMethod = "GET"
+                
+                // ILMU HITAM 2: Menyamar sebagai Browser Chrome agar tidak diblokir GitHub!
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
                 connection.connect()
 
                 if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                    throw Exception("Server mengembalikan kode HTTP ${connection.responseCode}")
+                    // Jika error, tampilkan URL-nya sekalian di layar HP
+                    throw Exception("HTTP ${connection.responseCode} dari URL:\n$pluginUrl")
                 }
 
                 val inputStream = connection.inputStream
@@ -53,10 +54,8 @@ class CloudstreamModule(reactContext: ReactApplicationContext) : ReactContextBas
 
                 outputStream.close()
                 inputStream.close()
-                Log.d("Cloudstream", "Download selesai: ${outputFile.absolutePath}")
-
-                // 3. Proses "Ilmu Hitam" DexClassLoader untuk membaca .cs3
-                // File .cs3 sebenarnya adalah file .apk/.zip yang berisi classes.dex
+                
+                // --- PROSES LOAD PLUGIN KOTLIN (.cs3 -> DexClassLoader) ---
                 val optimizedDexOutputPath = reactApplicationContext.getDir("outdex", Context.MODE_PRIVATE)
                 
                 val dexClassLoader = DexClassLoader(
@@ -66,12 +65,12 @@ class CloudstreamModule(reactContext: ReactApplicationContext) : ReactContextBas
                     reactApplicationContext.classLoader
                 )
 
-                // Jika sampai sini tidak error, berarti file .cs3 berhasil di-load ke dalam memori aplikasi!
-                promise.resolve("Plugin $pluginName berhasil didownload dan di-load ke mesin Android!")
+                // Jika sukses, laporkan kembali ke JavaScript!
+                promise.resolve("Plugin $pluginName berhasil didownload dan diaktifkan!")
 
             } catch (e: Exception) {
                 Log.e("Cloudstream", "Error: ${e.message}")
-                promise.reject("PLUGIN_ERROR", "Gagal memproses plugin: ${e.message}", e)
+                promise.reject("PLUGIN_ERROR", e.message, e)
             }
         }
     }

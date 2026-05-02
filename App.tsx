@@ -6,7 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { WebView } from 'react-native-webview'; // Jendela untuk memutar video Vidsrc
 
-const TMDB_API_KEY = "b030404650f279792a8d3287232358e3"; // Dari file Kotlin-mu!
+const TMDB_API_KEY = "b030404650f279792a8d3287232358e3"; // API Key TMDB
 
 // --- TEMA WARNA ---
 const THEME = {
@@ -20,29 +20,30 @@ const THEME = {
   red: '#E50914',
 };
 
-// --- KOMPONEN PEMUTAR VIDEO (MODAL) ---
+// --- KOMPONEN PEMUTAR VIDEO (MODAL WEBVIEW) ---
 const VideoPlayerModal = ({ movieId, visible, onClose }: { movieId: string | null, visible: boolean, onClose: () => void }) => {
   if (!movieId) return null;
-  // Menggunakan embed Vidsrc yang ada di file Kotlin-mu
+  // Memutar video menggunakan URL Vidsrc
   const videoUrl = `https://vidsrc.cc/v2/embed/movie/${movieId}`;
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#000' }}>
-        {/* Tombol Tutup */}
-        <SafeAreaView style={{ position: 'absolute', top: 10, right: 20, zIndex: 10 }}>
-          <TouchableOpacity onPress={onClose} style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 10, borderRadius: 20 }}>
-            <Icon name="close" size={30} color="#FFF" />
+        {/* Tombol Tutup (X) */}
+        <SafeAreaView style={{ position: 'absolute', top: 15, right: 20, zIndex: 10 }}>
+          <TouchableOpacity onPress={onClose} style={{ backgroundColor: 'rgba(0,0,0,0.6)', padding: 10, borderRadius: 30 }}>
+            <Icon name="close" size={28} color="#FFF" />
           </TouchableOpacity>
         </SafeAreaView>
         
-        {/* Pemutar Video Web */}
+        {/* Pemutar Video Web (Vidsrc) */}
         <WebView 
           source={{ uri: videoUrl }}
           style={{ flex: 1, backgroundColor: '#000' }}
           allowsFullscreenVideo={true}
           javaScriptEnabled={true}
           domStorageEnabled={true}
+          mediaPlaybackRequiresUserAction={false}
         />
       </View>
     </Modal>
@@ -53,10 +54,9 @@ const VideoPlayerModal = ({ movieId, visible, onClose }: { movieId: string | nul
 const BerandaScreen = ({ isTV }: { isTV?: boolean }) => {
   const [movies, setMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // State untuk Player
   const [activeMovieId, setActiveMovieId] = useState<string | null>(null);
 
+  // Mengambil data Trending dari TMDB saat aplikasi dibuka
   useEffect(() => {
     const fetchMovies = async () => {
       try {
@@ -65,7 +65,7 @@ const BerandaScreen = ({ isTV }: { isTV?: boolean }) => {
         setMovies(data.results);
         setLoading(false);
       } catch (error) {
-        console.error(error);
+        console.error("Gagal load TMDB:", error);
         setLoading(false);
       }
     };
@@ -77,7 +77,7 @@ const BerandaScreen = ({ isTV }: { isTV?: boolean }) => {
       <VideoPlayerModal movieId={activeMovieId} visible={!!activeMovieId} onClose={() => setActiveMovieId(null)} />
       
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Banner Monas */}
+        {/* Banner Utama */}
         <ImageBackground 
           source={{ uri: 'https://images.unsplash.com/photo-1555899434-94d1368aa7af?q=80&w=1000&auto=format&fit=crop' }} 
           style={[styles.banner, isTV ? { height: 350 } : { height: 220 }, { marginTop: 20 }]}
@@ -94,9 +94,10 @@ const BerandaScreen = ({ isTV }: { isTV?: boolean }) => {
           </View>
         </ImageBackground>
 
-        {/* FILM TRENDING TMDB */}
+        {/* --- SEKSI FILM TRENDING TMDB --- */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Box Office Terbaru</Text>
+          <Text style={styles.seeAll}>Lihat Semua {'>'}</Text>
         </View>
         
         {loading ? (
@@ -104,9 +105,13 @@ const BerandaScreen = ({ isTV }: { isTV?: boolean }) => {
         ) : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
             {movies.map((movie) => (
-              <TouchableOpacity key={movie.id} style={styles.movieCard} onPress={() => setActiveMovieId(movie.id.toString())}>
+              <TouchableOpacity 
+                key={movie.id} 
+                style={styles.movieCard} 
+                onPress={() => setActiveMovieId(movie.id.toString())} // Saat diklik, putar film!
+              >
                 <Image source={{ uri: `https://image.tmdb.org/t/p/w500${movie.poster_path}` }} style={styles.moviePoster} />
-                <Text style={styles.movieTitle} numberOfLines={1}>{movie.title}</Text>
+                <Text style={styles.movieTitle} numberOfLines={1}>{movie.title || movie.name}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -255,7 +260,7 @@ const MobileLayout = () => (
       >
         <Tab.Screen name="Beranda" component={BerandaScreen} />
         <Tab.Screen name="Live TV" children={() => <DummyScreen title="Live TV" />} />
-        {/* Tab Plugin sekarang diubah jadi Pencarian Film! */}
+        {/* Tab Plugin resmi diganti jadi Pencarian Film! */}
         <Tab.Screen name="Cari" component={CariScreen} />
         <Tab.Screen name="Akun" children={() => <DummyScreen title="Akun" />} />
       </Tab.Navigator>

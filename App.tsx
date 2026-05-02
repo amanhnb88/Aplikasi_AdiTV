@@ -1,53 +1,117 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Platform, StatusBar, TouchableOpacity, ScrollView, ImageBackground, ActivityIndicator, Modal, TextInput, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Platform, StatusBar, TouchableOpacity, ScrollView, ImageBackground, ActivityIndicator, Modal, TextInput, Image, Dimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
-import Video from 'react-native-video'; // <--- MESIN EXOPLAYER!
+import Video from 'react-native-video';
 
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TMDB_API_KEY = "b030404650f279792a8d3287232358e3"; 
 
 const THEME = {
   bg: '#050B14', cardBg: '#111A2E', sidebarBg: '#03070E',
-  primary: '#2B52C3', active: '#4A90E2', text: '#FFFFFF',
-  textMuted: '#888888', red: '#E50914',
+  primary: '#E50914', active: '#E50914', text: '#FFFFFF',
+  textMuted: '#888888',
 };
 
-// --- 1. PEMUTAR VIDEO (EXOPLAYER NATIVE) ---
-const VideoPlayerModal = ({ videoUrl, visible, onClose }: { videoUrl: string | null, visible: boolean, onClose: () => void }) => {
-  if (!videoUrl) return null;
+// ==========================================
+// 1. MESIN EKSTRAKTOR (TERJEMAHAN KOTLIN -> JS)
+// ==========================================
+const extractVideoLink = async (tmdbId: string, isTv: boolean) => {
+  // Terjemahan dari file Extractors.kt (Class Majorplay)
+  try {
+    const response = await fetch(`https://e2e.majorplay.net/api/token/viewer?videoId=${tmdbId}`, {
+      headers: { "Origin": "https://e2e.majorplay.net", "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36" }
+    });
+    const data = await response.json();
+    if (data.hlsUrl || data.primaryUrl) return data.hlsUrl || data.primaryUrl;
+  } catch (error) {
+    console.log("Ekstraktor Majorplay Gagal, coba fallback...", error);
+  }
+  // Jika gagal, gunakan fallback video tester (karena server bajakan sering ganti domain)
+  return "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
+};
+
+
+// ==========================================
+// 2. PEMUTAR VIDEO CUSTOM (GAYA NETFLIX/HBO)
+// ==========================================
+const CustomVideoPlayer = ({ videoUrl, title, visible, onClose }: { videoUrl: string | null, title: string, visible: boolean, onClose: () => void }) => {
+  const [paused, setPaused] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+
+  // Auto-hide controls
+  useEffect(() => {
+    if (showControls && !paused) {
+      const timer = setTimeout(() => setShowControls(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [showControls, paused]);
+
+  if (!visible || !videoUrl) return null;
+
   return (
-    <Modal visible={visible} animationType="fade" transparent={false} onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center' }}>
-        {/* Tombol Tutup */}
-        <SafeAreaView style={{ position: 'absolute', top: 15, right: 20, zIndex: 10 }}>
-          <TouchableOpacity onPress={onClose} style={{ backgroundColor: 'rgba(0,0,0,0.6)', padding: 10, borderRadius: 30 }}>
-            <Icon name="close" size={28} color="#FFF" />
-          </TouchableOpacity>
-        </SafeAreaView>
+    <Modal visible={visible} animationType="fade" transparent={false} onRequestClose={onClose} supportedOrientations={['landscape']}>
+      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
         
-        {/* EXOPLAYER Asli dari react-native-video */}
-        <Video 
-          source={{ uri: videoUrl }} 
-          style={StyleSheet.absoluteFill} // Bikin Fullscreen
-          controls={true}                 // Memunculkan tombol play/pause bawaan ExoPlayer
-          resizeMode="contain"            // Agar rasio video tidak peyang
-          onError={(e) => console.log("Video Error:", e)}
-          bufferConfig={{
-            minBufferMs: 15000,
-            maxBufferMs: 50000,
-            bufferForPlaybackMs: 2500,
-            bufferForPlaybackAfterRebufferMs: 5000
-          }}
-        />
+        {/* MESIN EXOPLAYER */}
+        <TouchableOpacity activeOpacity={1} style={StyleSheet.absoluteFill} onPress={() => setShowControls(!showControls)}>
+          <Video 
+            source={{ uri: videoUrl }} 
+            style={StyleSheet.absoluteFill} 
+            paused={paused}
+            resizeMode="contain" 
+            onError={(e) => console.log("Video Error:", e)}
+            bufferConfig={{ minBufferMs: 15000, maxBufferMs: 50000, bufferForPlaybackMs: 2500, bufferForPlaybackAfterRebufferMs: 5000 }}
+          />
+        </TouchableOpacity>
+
+        {/* OVERLAY KONTROL GAYA NETFLIX */}
+        {showControls && (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'space-between' }]}>
+            
+            {/* Header: Tombol Back & Judul */}
+            <SafeAreaView style={{ flexDirection: 'row', alignItems: 'center', padding: 20 }}>
+              <TouchableOpacity onPress={onClose} style={{ padding: 10 }}>
+                <Icon name="arrow-back" size={28} color="#FFF" />
+              </TouchableOpacity>
+              <Text style={{ color: '#FFF', fontSize: 18, fontWeight: 'bold', marginLeft: 10 }}>{title}</Text>
+            </SafeAreaView>
+
+            {/* Tengah: Play/Pause Besar */}
+            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+              <TouchableOpacity onPress={() => setPaused(!paused)} style={{ padding: 20 }}>
+                <Icon name={paused ? "play" : "pause"} size={60} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Bawah: Progress Bar & Fitur Tambahan */}
+            <SafeAreaView style={{ padding: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <Text style={{ color: '#FFF', fontSize: 12 }}>00:00</Text>
+                <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.3)', flex: 1, marginHorizontal: 15, borderRadius: 2 }}>
+                  <View style={{ height: '100%', width: '30%', backgroundColor: THEME.primary, borderRadius: 2 }} />
+                </View>
+                <Text style={{ color: '#FFF', fontSize: 12 }}>Tontonan Langsung</Text>
+              </View>
+              <View style={{ flexDirection: 'row', marginLeft: 20 }}>
+                <TouchableOpacity style={{ marginLeft: 20 }}><Icon name="chatbox-ellipses-outline" size={24} color="#FFF" /></TouchableOpacity>
+                <TouchableOpacity style={{ marginLeft: 20 }}><Icon name="speedometer-outline" size={24} color="#FFF" /></TouchableOpacity>
+              </View>
+            </SafeAreaView>
+          </View>
+        )}
       </View>
     </Modal>
   );
 };
 
-// --- 2. LAYAR DETAIL FILM ---
-const DetailMovieModal = ({ movieId, mediaType, visible, onClose }: { movieId: string | null, mediaType: string, visible: boolean, onClose: () => void }) => {
+
+// ==========================================
+// 3. LAYAR DETAIL FILM & REKOMENDASI
+// ==========================================
+const DetailMovieModal = ({ movieId, mediaType, visible, onClose, onMoviePress }: any) => {
   const [detail, setDetail] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [videoUrlToPlay, setVideoUrlToPlay] = useState<string | null>(null);
@@ -61,7 +125,8 @@ const DetailMovieModal = ({ movieId, mediaType, visible, onClose }: { movieId: s
       setActiveTab(mediaType === 'tv' ? 'Episode' : 'Sinopsis');
       try {
         const type = mediaType === 'tv' ? 'tv' : 'movie';
-        const res = await fetch(`https://api.themoviedb.org/3/${type}/${movieId}?api_key=${TMDB_API_KEY}&language=id-ID&append_to_response=credits,videos`);
+        // Sedot detail, aktor, dan SARAN VIDEO (Recommendations)
+        const res = await fetch(`https://api.themoviedb.org/3/${type}/${movieId}?api_key=${TMDB_API_KEY}&language=id-ID&append_to_response=credits,recommendations`);
         let data = await res.json();
         
         if (!data.overview) {
@@ -78,65 +143,76 @@ const DetailMovieModal = ({ movieId, mediaType, visible, onClose }: { movieId: s
 
   if (!visible || !movieId) return null;
 
-  // SEMENTARA KITA PAKAI LINK .m3u8 DUMMY UNTUK TES EXOPLAYER
-  // Nanti kita buat Extractor khusus untuk mencari link m3u8 asli filmnya
-  const testM3u8Link = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"; 
-
-  const handlePlayMovie = () => setVideoUrlToPlay(testM3u8Link);
-  const handlePlayEpisode = (season: number, episode: number) => setVideoUrlToPlay(testM3u8Link);
-  const handlePlayTrailer = () => setVideoUrlToPlay(testM3u8Link); // Youtube tidak bisa di ExoPlayer, ini buat tes saja
+  const handlePlay = async () => {
+    setLoading(true);
+    const link = await extractVideoLink(movieId, mediaType === 'tv');
+    setVideoUrlToPlay(link);
+    setLoading(false);
+  };
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: THEME.bg }}>
-        <VideoPlayerModal videoUrl={videoUrlToPlay} visible={!!videoUrlToPlay} onClose={() => setVideoUrlToPlay(null)} />
         
-        {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator size="large" color={THEME.active} /></View>
+        <CustomVideoPlayer 
+          videoUrl={videoUrlToPlay} 
+          title={detail?.title || detail?.name} 
+          visible={!!videoUrlToPlay} 
+          onClose={() => setVideoUrlToPlay(null)} 
+        />
+        
+        {loading && !detail ? (
+          <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator size="large" color={THEME.primary} /></View>
         ) : detail && (
           <ScrollView showsVerticalScrollIndicator={false}>
-            {/* BACKDROP POSTER */}
+            {/* BACKDROP */}
             <View>
-              <Image source={{ uri: `https://image.tmdb.org/t/p/original${detail.backdrop_path || detail.poster_path}` }} style={{ width: '100%', height: 250 }} />
+              <Image source={{ uri: `https://image.tmdb.org/t/p/original${detail.backdrop_path || detail.poster_path}` }} style={{ width: '100%', height: 280 }} />
+              <View style={{ position: 'absolute', bottom: 0, width: '100%', height: 150, backgroundColor: 'rgba(5, 11, 20, 0.7)' }} />
               <SafeAreaView style={{ position: 'absolute', top: 10, left: 15 }}>
-                <TouchableOpacity onPress={onClose} style={{ backgroundColor: 'rgba(0,0,0,0.6)', padding: 10, borderRadius: 30 }}>
-                  <Icon name="arrow-back" size={24} color="#FFF" />
+                <TouchableOpacity onPress={onClose} style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 10, borderRadius: 30 }}>
+                  <Icon name="close" size={28} color="#FFF" />
                 </TouchableOpacity>
               </SafeAreaView>
             </View>
 
             {/* INFO UTAMA */}
-            <View style={{ padding: 20 }}>
-              <Text style={{ color: THEME.text, fontSize: 26, fontWeight: 'bold', marginBottom: 5 }}>{detail.title || detail.name}</Text>
-              <Text style={{ color: '#00C853', fontSize: 14, fontWeight: 'bold', marginBottom: 15 }}>
-                {detail.vote_average ? `${(detail.vote_average * 10).toFixed(0)}% Match` : 'New'} 
-                <Text style={{ color: THEME.textMuted, fontWeight: 'normal' }}>  {detail.release_date?.substring(0,4) || detail.first_air_date?.substring(0,4)}  •  {mediaType === 'tv' ? `${detail.number_of_seasons} Season` : `${detail.runtime} Menit`}</Text>
-              </Text>
+            <View style={{ padding: 20, marginTop: -60 }}>
+              <Text style={{ color: THEME.text, fontSize: 32, fontWeight: '900', marginBottom: 5 }}>{detail.title || detail.name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+                <Text style={{ color: '#46D369', fontWeight: 'bold', marginRight: 10 }}>{detail.vote_average ? `${(detail.vote_average * 10).toFixed(0)}% Match` : 'Baru'}</Text>
+                <Text style={{ color: '#BCBCBC', marginRight: 10 }}>{detail.release_date?.substring(0,4) || detail.first_air_date?.substring(0,4)}</Text>
+                <Text style={{ color: '#BCBCBC', backgroundColor: '#333', paddingHorizontal: 5, borderRadius: 3, marginRight: 10 }}>18+</Text>
+                <Text style={{ color: '#BCBCBC' }}>{mediaType === 'tv' ? `${detail.number_of_seasons} Season` : `${detail.runtime}m`}</Text>
+              </View>
 
-              {/* TOMBOL PLAY (KHUSUS MOVIE) */}
-              {mediaType !== 'tv' && (
-                <TouchableOpacity style={[styles.btnPrimary, { justifyContent: 'center', marginBottom: 20 }]} onPress={handlePlayMovie}>
-                  <Icon name="play" size={24} color="#FFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.btnText}>Putar Film</Text>
-                </TouchableOpacity>
-              )}
+              {/* TOMBOL PLAY */}
+              <TouchableOpacity style={{ backgroundColor: '#FFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 4, marginBottom: 15 }} onPress={handlePlay}>
+                <Icon name="play" size={24} color="#000" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 16 }}>Putar Sekarang</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={{ backgroundColor: '#2A2A2A', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 4, marginBottom: 25 }}>
+                <Icon name="download-outline" size={24} color="#FFF" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>Unduh</Text>
+              </TouchableOpacity>
 
-              {/* TAB MENU */}
-              <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#1A2230', marginBottom: 20 }}>
+              {/* TABS */}
+              <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#2A2A2A', marginBottom: 20 }}>
                 {mediaType === 'tv' && (
                   <TouchableOpacity style={[styles.tabItem, activeTab === 'Episode' && styles.tabItemActive]} onPress={() => setActiveTab('Episode')}>
-                    <Text style={[styles.tabText, activeTab === 'Episode' && styles.tabTextActive]}>Episode</Text>
+                    <Text style={[styles.tabText, activeTab === 'Episode' && styles.tabTextActive]}>EPISODE</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity style={[styles.tabItem, activeTab === 'Sinopsis' && styles.tabItemActive]} onPress={() => setActiveTab('Sinopsis')}>
-                  <Text style={[styles.tabText, activeTab === 'Sinopsis' && styles.tabTextActive]}>Sinopsis</Text>
+                  <Text style={[styles.tabText, activeTab === 'Sinopsis' && styles.tabTextActive]}>SINOPSIS</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.tabItem, activeTab === 'Pemeran' && styles.tabItemActive]} onPress={() => setActiveTab('Pemeran')}>
-                  <Text style={[styles.tabText, activeTab === 'Pemeran' && styles.tabTextActive]}>Pemeran</Text>
+                  <Text style={[styles.tabText, activeTab === 'Pemeran' && styles.tabTextActive]}>PEMERAN</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* KONTEN TAB: EPISODE (KHUSUS SERIES) */}
+              {/* KONTEN TAB */}
               {activeTab === 'Episode' && mediaType === 'tv' && (
                 <View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
@@ -146,41 +222,41 @@ const DetailMovieModal = ({ movieId, mediaType, visible, onClose }: { movieId: s
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
-                  
                   {Array.from({ length: detail.seasons?.find((s:any) => s.season_number === selectedSeason)?.episode_count || 0 }).map((_, index) => (
-                    <TouchableOpacity key={index} style={styles.episodeCard} onPress={() => handlePlayEpisode(selectedSeason, index + 1)}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: THEME.text, fontSize: 16, fontWeight: 'bold' }}>Episode {index + 1}</Text>
-                        <Text style={{ color: THEME.textMuted, fontSize: 12 }}>S{selectedSeason} : E{index + 1}</Text>
-                      </View>
-                      <Icon name="play-circle" size={36} color={THEME.text} />
+                    <TouchableOpacity key={index} style={styles.episodeCard} onPress={handlePlay}>
+                      <View style={{ flex: 1 }}><Text style={{ color: THEME.text, fontSize: 16, fontWeight: 'bold' }}>Episode {index + 1}</Text><Text style={{ color: THEME.textMuted, fontSize: 12 }}>S{selectedSeason} : E{index + 1}</Text></View>
+                      <Icon name="play-circle-outline" size={36} color="#FFF" />
                     </TouchableOpacity>
                   ))}
                 </View>
               )}
 
-              {/* KONTEN TAB: SINOPSIS */}
               {activeTab === 'Sinopsis' && (
-                <View>
-                  <Text style={{ color: '#DDD', fontSize: 14, lineHeight: 22 }}>
-                    {detail.overview || "Maaf, sinopsis tidak tersedia untuk judul ini."}
-                  </Text>
-                  <Text style={{ color: THEME.textMuted, fontSize: 12, marginTop: 15 }}>Genre: {detail.genres?.map((g:any)=>g.name).join(', ')}</Text>
-                </View>
+                <Text style={{ color: '#DDD', fontSize: 14, lineHeight: 22 }}>{detail.overview || "Sinopsis tidak tersedia."}</Text>
               )}
 
-              {/* KONTEN TAB: PEMERAN */}
               {activeTab === 'Pemeran' && (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {detail.credits?.cast?.slice(0, 15).map((actor: any) => (
-                    <View key={actor.id} style={{ width: '33%', alignItems: 'center', marginBottom: 20 }}>
+                    <View key={actor.id} style={{ width: 80, alignItems: 'center', marginRight: 15 }}>
                       <Image source={{ uri: actor.profile_path ? `https://image.tmdb.org/t/p/w200${actor.profile_path}` : 'https://via.placeholder.com/150' }} style={{ width: 70, height: 70, borderRadius: 35, backgroundColor: THEME.cardBg, marginBottom: 8 }} />
-                      <Text style={{ color: THEME.text, fontSize: 12, textAlign: 'center' }} numberOfLines={1}>{actor.name}</Text>
-                      <Text style={{ color: THEME.textMuted, fontSize: 10, textAlign: 'center' }} numberOfLines={1}>{actor.character}</Text>
+                      <Text style={{ color: THEME.text, fontSize: 12, textAlign: 'center' }} numberOfLines={2}>{actor.name}</Text>
                     </View>
                   ))}
-                </View>
+                </ScrollView>
               )}
+
+              {/* REKOMENDASI (SARAN VIDEO) TERJEMAHAN KOTLIN */}
+              <View style={{ marginTop: 30 }}>
+                <Text style={{ color: '#FFF', fontSize: 18, fontWeight: 'bold', marginBottom: 15 }}>Lebih Banyak Seperti Ini</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                  {detail.recommendations?.results?.slice(0, 9).map((rec: any) => (
+                    <TouchableOpacity key={rec.id} style={{ width: '31%', marginBottom: 15 }} onPress={() => onMoviePress(rec.id.toString(), rec.media_type || mediaType)}>
+                      <Image source={{ uri: `https://image.tmdb.org/t/p/w200${rec.poster_path}` }} style={{ width: '100%', aspectRatio: 2/3, borderRadius: 4, backgroundColor: '#2A2A2A' }} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
 
             </View>
           </ScrollView>
@@ -190,13 +266,13 @@ const DetailMovieModal = ({ movieId, mediaType, visible, onClose }: { movieId: s
   );
 };
 
-// --- 3. KOMPONEN BARIS FILM (HORIZONTAL SCROLL) ---
-const MovieRow = ({ title, fetchUrl, type, onMoviePress }: { title: string, fetchUrl: string, type: string, onMoviePress: (id: string, type: string) => void }) => {
-  const [movies, setMovies] = useState<any[]>([]);
-  useEffect(() => {
-    fetch(fetchUrl).then(r => r.json()).then(d => setMovies(d.results)).catch(e => console.error(e));
-  }, [fetchUrl]);
 
+// ==========================================
+// 4. BERANDA & NAVIGASI
+// ==========================================
+const MovieRow = ({ title, fetchUrl, type, onMoviePress }: any) => {
+  const [movies, setMovies] = useState<any[]>([]);
+  useEffect(() => { fetch(fetchUrl).then(r => r.json()).then(d => setMovies(d.results)).catch(e => console.error(e)); }, [fetchUrl]);
   if (movies.length === 0) return null;
   return (
     <View style={{ marginBottom: 25 }}>
@@ -213,47 +289,34 @@ const MovieRow = ({ title, fetchUrl, type, onMoviePress }: { title: string, fetc
   );
 };
 
-// --- 4. BERANDA ---
-const BerandaScreen = ({ isTV }: { isTV?: boolean }) => {
+const BerandaScreen = () => {
   const [selectedMovie, setSelectedMovie] = useState<{id: string, type: string} | null>(null);
-
-  const urlTrending = `https://api.themoviedb.org/3/trending/all/week?api_key=${TMDB_API_KEY}&language=id-ID`;
-  const urlMovies = `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&language=id-ID&sort_by=popularity.desc`;
-  const urlSeries = `https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_API_KEY}&language=id-ID&sort_by=popularity.desc`;
-  const urlAnime = `https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_API_KEY}&language=id-ID&with_genres=16&with_original_language=ja`;
-  const urlAsia = `https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_API_KEY}&language=id-ID&with_original_language=ko|zh|th`;
-
   const handlePress = (id: string, type: string) => setSelectedMovie({ id, type });
 
   return (
     <View style={{ flex: 1, backgroundColor: THEME.bg }}>
-      <DetailMovieModal movieId={selectedMovie?.id || null} mediaType={selectedMovie?.type || 'movie'} visible={!!selectedMovie} onClose={() => setSelectedMovie(null)} />
-      
+      <DetailMovieModal movieId={selectedMovie?.id || null} mediaType={selectedMovie?.type || 'movie'} visible={!!selectedMovie} onClose={() => setSelectedMovie(null)} onMoviePress={handlePress} />
       <ScrollView showsVerticalScrollIndicator={false}>
-        <ImageBackground source={{ uri: 'https://images.unsplash.com/photo-1555899434-94d1368aa7af?q=80&w=1000&auto=format&fit=crop' }} style={[styles.banner, { marginHorizontal: 20, marginTop: 20 }, isTV ? { height: 350 } : { height: 220 }]} imageStyle={{ borderRadius: 16, opacity: 0.6 }}>
-          <View style={styles.bannerContent}>
-            <Text style={styles.bannerBadge}>LIVE</Text>
-            <Text style={styles.bannerTitle}>Siaran Nasional</Text>
-            <TouchableOpacity style={[styles.btnPrimary, { alignSelf: 'flex-start' }]}>
-              <Icon name="play" size={18} color="#FFF" style={{ marginRight: 5 }} />
-              <Text style={styles.btnText}>Tonton Sekarang</Text>
+        <ImageBackground source={{ uri: 'https://images.unsplash.com/photo-1555899434-94d1368aa7af?q=80&w=1000&auto=format&fit=crop' }} style={[styles.banner, { marginHorizontal: 20, marginTop: 20, height: 400 }]} imageStyle={{ borderRadius: 12, opacity: 0.8 }}>
+          <View style={{ position: 'absolute', bottom: 0, width: '100%', height: '50%', backgroundColor: 'rgba(5,11,20,0.8)', justifyContent: 'flex-end', padding: 20, borderRadius: 12 }}>
+            <Text style={{ color: '#FFF', fontSize: 32, fontWeight: '900', textAlign: 'center', marginBottom: 15 }}>SIARAN NASIONAL</Text>
+            <TouchableOpacity style={{ backgroundColor: '#FFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 4 }}>
+              <Icon name="play" size={20} color="#000" style={{ marginRight: 5 }} />
+              <Text style={{ color: '#000', fontWeight: 'bold' }}>Putar</Text>
             </TouchableOpacity>
           </View>
         </ImageBackground>
 
-        <MovieRow title="Sedang Tren Sekarang" fetchUrl={urlTrending} type="movie" onMoviePress={handlePress} />
-        <MovieRow title="Film Bioskop Populer" fetchUrl={urlMovies} type="movie" onMoviePress={handlePress} />
-        <MovieRow title="Seri TV Pilihan" fetchUrl={urlSeries} type="tv" onMoviePress={handlePress} />
-        <MovieRow title="Anime Terbaik" fetchUrl={urlAnime} type="tv" onMoviePress={handlePress} />
-        <MovieRow title="Drama Asia" fetchUrl={urlAsia} type="tv" onMoviePress={handlePress} />
-        
+        <MovieRow title="Sedang Tren Sekarang" fetchUrl={`https://api.themoviedb.org/3/trending/all/week?api_key=${TMDB_API_KEY}&language=id-ID`} type="movie" onMoviePress={handlePress} />
+        <MovieRow title="Film Bioskop Populer" fetchUrl={`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&language=id-ID&sort_by=popularity.desc`} type="movie" onMoviePress={handlePress} />
+        <MovieRow title="Seri TV Pilihan" fetchUrl={`https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_API_KEY}&language=id-ID&sort_by=popularity.desc`} type="tv" onMoviePress={handlePress} />
+        <MovieRow title="Anime Terbaik" fetchUrl={`https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_API_KEY}&language=id-ID&with_genres=16&with_original_language=ja`} type="tv" onMoviePress={handlePress} />
         <View style={{ height: 50 }} />
       </ScrollView>
     </View>
   );
 };
 
-// --- PENCARIAN FILM ---
 const CariScreen = () => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<any[]>([]);
@@ -270,84 +333,60 @@ const CariScreen = () => {
 
   return (
     <View style={styles.screenContainer}>
-      <DetailMovieModal movieId={selectedMovie?.id || null} mediaType={selectedMovie?.type || 'movie'} visible={!!selectedMovie} onClose={() => setSelectedMovie(null)} />
-      
-      <Text style={[styles.sectionTitle, { marginLeft: 0 }]}>Pencarian</Text>
-      <View style={{ flexDirection: 'row', marginBottom: 20 }}>
-        <TextInput style={styles.searchInput} placeholder="Ketik judul..." placeholderTextColor="#888" value={query} onChangeText={setQuery} onSubmitEditing={searchMovies} />
+      <DetailMovieModal movieId={selectedMovie?.id || null} mediaType={selectedMovie?.type || 'movie'} visible={!!selectedMovie} onClose={() => setSelectedMovie(null)} onMoviePress={(id: string, type: string) => setSelectedMovie({ id, type })} />
+      <View style={{ flexDirection: 'row', marginBottom: 20, marginTop: 20 }}>
+        <TextInput style={styles.searchInput} placeholder="Cari film, acara tv, anime..." placeholderTextColor="#888" value={query} onChangeText={setQuery} onSubmitEditing={searchMovies} />
         <TouchableOpacity style={styles.btnSearch} onPress={searchMovies}><Icon name="search" size={24} color="#FFF" /></TouchableOpacity>
       </View>
-
       <ScrollView showsVerticalScrollIndicator={false}>
         {results.map((movie) => (
-          <TouchableOpacity key={movie.id} style={styles.searchResultCard} onPress={() => setSelectedMovie({ id: movie.id.toString(), type: movie.media_type || 'movie' })}>
-            <Image source={{ uri: `https://image.tmdb.org/t/p/w200${movie.poster_path}` }} style={styles.searchThumb} />
-            <View style={{ flex: 1, paddingLeft: 15 }}>
+          <TouchableOpacity key={movie.id} style={{ flexDirection: 'row', backgroundColor: THEME.bg, marginBottom: 10 }} onPress={() => setSelectedMovie({ id: movie.id.toString(), type: movie.media_type || 'movie' })}>
+            <Image source={{ uri: `https://image.tmdb.org/t/p/w200${movie.poster_path || movie.backdrop_path}` }} style={{ width: 120, height: 70, borderRadius: 4, backgroundColor: THEME.cardBg }} />
+            <View style={{ flex: 1, paddingLeft: 15, justifyContent: 'center' }}>
               <Text style={{ color: THEME.text, fontSize: 16, fontWeight: 'bold' }}>{movie.title || movie.name}</Text>
-              <Text style={{ color: THEME.textMuted, fontSize: 12, marginTop: 5 }} numberOfLines={3}>{movie.overview}</Text>
             </View>
+            <View style={{ justifyContent: 'center', paddingRight: 10 }}><Icon name="play-circle-outline" size={30} color="#FFF" /></View>
           </TouchableOpacity>
         ))}
-        <View style={{ height: 100 }} />
       </ScrollView>
     </View>
   );
 };
 
-const DummyScreen = ({ title }: { title: string }) => (<View style={[styles.screenContainer, { justifyContent: 'center', alignItems: 'center' }]}><Text style={styles.bannerTitle}>{title}</Text></View>);
-const TVLayout = () => { return <DummyScreen title="TV Layout" /> }; 
+const DummyScreen = () => (<View style={[styles.screenContainer, { justifyContent: 'center', alignItems: 'center' }]}><Text style={{color: '#FFF'}}>Akan Datang</Text></View>);
 
 const Tab = createBottomTabNavigator();
 const MobileLayout = () => (
   <SafeAreaView style={{ flex: 1, backgroundColor: THEME.bg }}>
     <StatusBar barStyle="light-content" backgroundColor={THEME.bg} />
-    <View style={styles.mobileHeader}><Text style={styles.logoText}>ADITV</Text></View>
     <NavigationContainer>
-      <Tab.Navigator screenOptions={({ route }) => ({ headerShown: false, tabBarStyle: { backgroundColor: THEME.sidebarBg, borderTopColor: '#1A2230', height: 65, paddingBottom: 10, paddingTop: 10 }, tabBarActiveTintColor: THEME.active, tabBarInactiveTintColor: THEME.textMuted, tabBarIcon: ({ color }) => { let iconName = 'home'; if (route.name === 'Live TV') iconName = 'tv-outline'; if (route.name === 'Cari') iconName = 'search-outline'; if (route.name === 'Akun') iconName = 'person-outline'; return <Icon name={iconName} size={24} color={color} />; }, })}>
+      <Tab.Navigator screenOptions={({ route }) => ({ headerShown: false, tabBarStyle: { backgroundColor: 'rgba(5, 11, 20, 0.9)', borderTopWidth: 0, position: 'absolute', elevation: 0, height: 60, paddingBottom: 5 }, tabBarActiveTintColor: '#FFF', tabBarInactiveTintColor: THEME.textMuted, tabBarIcon: ({ color }) => { let iconName = 'home'; if (route.name === 'Cari') iconName = 'search-outline'; if (route.name === 'Unduhan') iconName = 'download-outline'; if (route.name === 'Lainnya') iconName = 'menu-outline'; return <Icon name={iconName} size={24} color={color} />; }, })}>
         <Tab.Screen name="Beranda" component={BerandaScreen} />
-        <Tab.Screen name="Live TV" children={() => <DummyScreen title="Live TV" />} />
         <Tab.Screen name="Cari" component={CariScreen} />
-        <Tab.Screen name="Akun" children={() => <DummyScreen title="Akun" />} />
+        <Tab.Screen name="Unduhan" component={DummyScreen} />
+        <Tab.Screen name="Lainnya" component={DummyScreen} />
       </Tab.Navigator>
     </NavigationContainer>
   </SafeAreaView>
 );
 
-export default function App() { return <SafeAreaProvider>{Platform.isTV ? <TVLayout /> : <MobileLayout />}</SafeAreaProvider>; }
+export default function App() { return <SafeAreaProvider><MobileLayout /></SafeAreaProvider>; }
 
-// --- 🎨 STYLE ---
 const styles = StyleSheet.create({
-  logoText: { color: THEME.text, fontSize: 26, fontWeight: '900', letterSpacing: 1 },
   screenContainer: { flex: 1, backgroundColor: THEME.bg, paddingHorizontal: 20 },
-  mobileHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15 },
-  
-  banner: { justifyContent: 'center', marginBottom: 25, borderRadius: 16, overflow: 'hidden', backgroundColor: '#1A2230' },
-  bannerContent: { padding: 25, flex: 1, justifyContent: 'center' },
-  bannerBadge: { backgroundColor: THEME.red, color: THEME.text, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, fontSize: 10, fontWeight: '900', marginBottom: 10 },
-  bannerTitle: { color: THEME.text, fontSize: 26, fontWeight: 'bold', marginBottom: 8 },
-  bannerSubtitle: { color: '#E0E0E0', fontSize: 14, marginBottom: 20 },
-  btnPrimary: { backgroundColor: THEME.primary, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
-  btnText: { color: THEME.text, fontWeight: 'bold', fontSize: 16 },
-
-  sectionTitle: { color: THEME.text, fontSize: 18, fontWeight: 'bold', marginBottom: 15, marginLeft: 20 },
-  movieCard: { width: 110, marginRight: 15 },
-  moviePoster: { width: 110, height: 160, borderRadius: 8, backgroundColor: '#1A2230' },
-
+  banner: { justifyContent: 'center', marginBottom: 25, borderRadius: 12, overflow: 'hidden', backgroundColor: '#1A2230' },
+  sectionTitle: { color: THEME.text, fontSize: 18, fontWeight: 'bold', marginBottom: 10, marginLeft: 20 },
+  movieCard: { width: 110, marginRight: 10 },
+  moviePoster: { width: 110, height: 160, borderRadius: 4, backgroundColor: '#2A2A2A' },
   tabItem: { paddingBottom: 10, marginRight: 20 },
-  tabItemActive: { borderBottomWidth: 3, borderBottomColor: THEME.red },
-  tabText: { color: THEME.textMuted, fontSize: 16, fontWeight: '600' },
-  tabTextActive: { color: THEME.text, fontWeight: 'bold' },
-
-  seasonPill: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, backgroundColor: THEME.cardBg, marginRight: 10 },
-  seasonPillActive: { backgroundColor: '#E50914' },
+  tabItemActive: { borderBottomWidth: 3, borderBottomColor: THEME.primary },
+  tabText: { color: THEME.textMuted, fontSize: 14, fontWeight: 'bold' },
+  tabTextActive: { color: THEME.text },
+  seasonPill: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 4, backgroundColor: '#2A2A2A', marginRight: 10 },
+  seasonPillActive: { backgroundColor: THEME.text },
   seasonText: { color: THEME.text, fontWeight: 'bold' },
-  seasonTextActive: { color: '#FFF' },
-  episodeCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: THEME.cardBg, padding: 15, borderRadius: 12, marginBottom: 10, borderColor: '#1A2230', borderWidth: 1 },
-
-  trailerCard: { width: '100%', height: 180, backgroundColor: THEME.cardBg, borderRadius: 12, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-
-  searchInput: { flex: 1, backgroundColor: THEME.cardBg, color: '#FFF', borderRadius: 8, paddingHorizontal: 15, height: 50 },
-  btnSearch: { backgroundColor: THEME.primary, width: 50, height: 50, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
-  searchResultCard: { flexDirection: 'row', backgroundColor: THEME.cardBg, padding: 10, borderRadius: 12, marginBottom: 15 },
-  searchThumb: { width: 60, height: 90, borderRadius: 8 },
+  seasonTextActive: { color: '#000' },
+  episodeCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#2A2A2A' },
+  searchInput: { flex: 1, backgroundColor: '#333', color: '#FFF', borderRadius: 4, paddingHorizontal: 15, height: 50 },
+  btnSearch: { backgroundColor: '#333', width: 50, height: 50, borderRadius: 4, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
 });

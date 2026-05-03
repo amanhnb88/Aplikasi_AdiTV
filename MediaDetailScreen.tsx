@@ -1,21 +1,77 @@
-// File: src/screens/MediaDetailScreen.tsx
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Platform, Dimensions } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Image, 
+  TouchableOpacity, 
+  ScrollView, 
+  Platform, 
+  Dimensions, 
+  NativeModules, 
+  ActivityIndicator, 
+  Alert 
+} from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 const { width } = Dimensions.get('window');
-const isTV = Platform.isTV || width > 800; // Deteksi apakah ini di TV/Layar Lebar
+// Deteksi apakah ini di TV/Layar Lebar agar layout menyesuaikan otomatis
+const isTV = Platform.isTV || width > 800; 
+
+// Mengambil modul Kotlin buatan kita
+const { Cloudstream } = NativeModules;
 
 const THEME = {
   bg: '#050B14',
-  primaryBtn: '#0055FF', // Biru terang seperti di screenshot
+  primaryBtn: '#0055FF', // Biru terang ala UI premium
   secondaryBtn: '#1A2230',
   text: '#FFFFFF',
   textMuted: '#A0A0A0',
 };
 
-export default function MediaDetailScreen({ media, type = 'movie', onClose }) {
+export default function MediaDetailScreen({ media, type = 'movie', onClose, onPlayVideo }) {
   const [activeSeason, setActiveSeason] = useState(1);
+  const [activeEpisode, setActiveEpisode] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fungsi jembatan untuk mengeksekusi mesin Kotlin
+  const handleTontonSekarang = async () => {
+    setIsLoading(true);
+    try {
+      const isSeries = type === 'series';
+      // Pastikan tahun berupa angka. Beri nilai fallback jika kosong
+      const year = parseInt(media.year) || new Date().getFullYear(); 
+
+      console.log(`Mencari video: ${media.title} (${year})...`);
+
+      // Memanggil fungsi getVideoLink di CloudstreamModule.kt
+      const videoUrl = await Cloudstream.getVideoLink(
+        media.title, 
+        year, 
+        isSeries, 
+        activeSeason, 
+        activeEpisode
+      );
+      
+      console.log("Berhasil! Dapat link video dari Kotlin: ", videoUrl);
+      
+      // Kirim URL ke pemutar video (CustomVideoPlayer) di layer atasnya
+      if (onPlayVideo) {
+        onPlayVideo(videoUrl, media.title);
+      }
+
+    } catch (error) {
+      console.error("Gagal mendapat video:", error);
+      Alert.alert(
+        "Waduh Bro!", 
+        "Video belum tersedia atau server sedang sibuk. Coba lagi nanti ya."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!media) return null;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={isTV ? styles.tvLayout : styles.mobileLayout}>
@@ -31,23 +87,24 @@ export default function MediaDetailScreen({ media, type = 'movie', onClose }) {
         
         {/* POSTER */}
         <Image 
-          source={{ uri: media.poster_path }} 
+          source={{ uri: media.poster_path || 'https://via.placeholder.com/300x450' }} 
           style={isTV ? styles.posterTV : styles.posterMobile} 
           resizeMode="cover"
         />
 
         {/* INFO KANAN (TV) / BAWAH POSTER (MOBILE) */}
         <View style={styles.infoSection}>
-          <Text style={styles.title}>{media.title}</Text>
+          <Text style={styles.title}>{media.title || media.name}</Text>
           
           {/* Metadata Bar (Bintang, Tahun, Durasi, Umur) */}
           <View style={styles.metaRow}>
             <Icon name="star" size={16} color="#FFD700" />
-            <Text style={styles.metaText}> {media.rating}</Text>
+            <Text style={styles.metaText}> {media.rating || 'Baru'}</Text>
             <Text style={styles.metaText}>  {media.year}</Text>
-            <Text style={styles.metaText}>  {media.duration}</Text>
-            <View style={styles.badge}><Text style={styles.badgeText}>{media.age}</Text></View>
-            <Text style={styles.metaText}>  {media.genres}</Text>
+            {type === 'movie' && <Text style={styles.metaText}>  {media.duration}</Text>}
+            {type === 'series' && <Text style={styles.metaText}>  {media.totalSeasons || '1'} Seasons</Text>}
+            <View style={styles.badge}><Text style={styles.badgeText}>{media.age || '18+'}</Text></View>
+            <Text style={styles.metaText}>  {media.genres || 'Action, Drama'}</Text>
           </View>
 
           {/* Kualitas Resolusi */}
@@ -59,20 +116,38 @@ export default function MediaDetailScreen({ media, type = 'movie', onClose }) {
           </View>
 
           {/* Sinopsis */}
-          <Text style={styles.synopsis}>{media.synopsis}</Text>
+          <Text style={styles.synopsis}>{media.synopsis || media.overview || 'Sinopsis belum tersedia.'}</Text>
 
           {/* Tabel Info (Sutradara, Pemeran, dll) */}
           <View style={styles.creditsTable}>
-            {media.director && <Text style={styles.creditLine}><Text style={styles.creditLabel}>Sutradara:  </Text>{media.director}</Text>}
-            <Text style={styles.creditLine}><Text style={styles.creditLabel}>Pemeran:   </Text>{media.cast}</Text>
-            <Text style={styles.creditLine}><Text style={styles.creditLabel}>Subtitle:  </Text>Indonesia, English</Text>
+            {media.director && (
+              <Text style={styles.creditLine}>
+                <Text style={styles.creditLabel}>Sutradara:  </Text>{media.director}
+              </Text>
+            )}
+            <Text style={styles.creditLine}>
+              <Text style={styles.creditLabel}>Pemeran:   </Text>{media.cast || 'Tidak ada data pemeran.'}
+            </Text>
+            <Text style={styles.creditLine}>
+              <Text style={styles.creditLabel}>Subtitle:  </Text>Indonesia, English
+            </Text>
           </View>
 
           {/* BARISAN TOMBOL AKSI */}
           <View style={isTV ? styles.actionRowTV : styles.actionRowMobile}>
-            <TouchableOpacity style={styles.btnPrimary}>
-              <Icon name="play" size={20} color="#FFF" />
-              <Text style={styles.btnPrimaryText}>Tonton Sekarang</Text>
+            <TouchableOpacity 
+              style={styles.btnPrimary} 
+              onPress={handleTontonSekarang}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <>
+                  <Icon name="play" size={20} color="#FFF" />
+                  <Text style={styles.btnPrimaryText}>Tonton Sekarang</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <View style={styles.secondaryActionContainer}>
@@ -101,7 +176,10 @@ export default function MediaDetailScreen({ media, type = 'movie', onClose }) {
               <TouchableOpacity 
                 key={s} 
                 style={[styles.seasonBadge, activeSeason === s && styles.seasonBadgeActive]}
-                onPress={() => setActiveSeason(s)}
+                onPress={() => {
+                  setActiveSeason(s);
+                  setActiveEpisode(1); // Reset ke episode 1 setiap ganti season
+                }}
               >
                 <Text style={[styles.seasonBadgeText, activeSeason === s && styles.seasonBadgeTextActive]}>
                   Season {s}
@@ -110,18 +188,26 @@ export default function MediaDetailScreen({ media, type = 'movie', onClose }) {
             ))}
           </ScrollView>
 
-          {/* List Episode (Contoh Dummy) */}
-          {[1, 2, 3].map((ep) => (
-            <TouchableOpacity key={ep} style={styles.episodeCard}>
+          {/* List Episode */}
+          {[1, 2, 3, 4, 5].map((ep) => (
+            <TouchableOpacity 
+              key={ep} 
+              style={[styles.episodeCard, activeEpisode === ep && styles.episodeCardActive]}
+              onPress={() => setActiveEpisode(ep)}
+            >
               <View style={styles.episodeThumbContainer}>
-                <Image source={{ uri: media.poster_path }} style={styles.episodeThumb} />
+                <Image source={{ uri: media.backdrop_path || media.poster_path }} style={styles.episodeThumb} />
                 <Icon name="play-circle-outline" size={30} color="#FFF" style={styles.episodePlayIcon} />
               </View>
               <View style={styles.episodeInfo}>
-                <Text style={styles.episodeTitle}>{ep}. Nama Episode</Text>
-                <Text style={styles.episodeDesc} numberOfLines={2}>Deskripsi singkat episode ini menjelaskan tentang alur cerita...</Text>
+                <Text style={[styles.episodeTitle, activeEpisode === ep && { color: THEME.primaryBtn }]}>
+                  {ep}. Episode {ep}
+                </Text>
+                <Text style={styles.episodeDesc} numberOfLines={2}>
+                  Ketuk untuk memilih episode ini, lalu tekan tombol "Tonton Sekarang" di atas.
+                </Text>
               </View>
-              <Text style={styles.episodeDuration}>48m</Text>
+              <Text style={styles.episodeDuration}>45m</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -132,7 +218,7 @@ export default function MediaDetailScreen({ media, type = 'movie', onClose }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: THEME.bg },
-  tvLayout: { padding: 40, paddingLeft: 100 }, // Memberi ruang untuk sidebar di TV
+  tvLayout: { padding: 40, paddingLeft: 100 }, 
   mobileLayout: { padding: 20, paddingTop: 40 },
   
   backBtn: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
@@ -160,7 +246,6 @@ const styles = StyleSheet.create({
   creditLine: { color: THEME.text, fontSize: 14, marginBottom: 5 },
   creditLabel: { color: THEME.textMuted, width: 80 },
 
-  // LOGIKA TOMBOL
   actionRowTV: { flexDirection: 'row', alignItems: 'center' },
   actionRowMobile: { flexDirection: 'column' },
   
@@ -171,7 +256,6 @@ const styles = StyleSheet.create({
   btnSecondary: { backgroundColor: THEME.secondaryBtn, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 8, flex: isTV ? 0 : 1, marginRight: isTV ? 15 : 5, marginLeft: isTV ? 0 : 5 },
   btnSecondaryText: { color: '#FFF', fontWeight: 'bold', fontSize: 14, marginLeft: 8 },
 
-  // SERIES STYLE
   episodesSection: { marginTop: 40 },
   sectionTitle: { color: '#FFF', fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
   seasonScroll: { marginBottom: 20 },
@@ -180,10 +264,11 @@ const styles = StyleSheet.create({
   seasonBadgeText: { color: THEME.textMuted, fontWeight: 'bold' },
   seasonBadgeTextActive: { color: '#FFF' },
   
-  episodeCard: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  episodeThumbContainer: { position: 'relative' },
-  episodeThumb: { width: 120, height: 70, borderRadius: 8, backgroundColor: '#222' },
-  episodePlayIcon: { position: 'absolute', top: 20, left: 45 },
+  episodeCard: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, padding: 10, borderRadius: 8 },
+  episodeCardActive: { backgroundColor: 'rgba(0, 85, 255, 0.15)' },
+  episodeThumbContainer: { position: 'relative', justifyContent: 'center', alignItems: 'center' },
+  episodeThumb: { width: 120, height: 70, borderRadius: 8, backgroundColor: '#222', opacity: 0.7 },
+  episodePlayIcon: { position: 'absolute' },
   episodeInfo: { flex: 1, paddingHorizontal: 15 },
   episodeTitle: { color: '#FFF', fontSize: 16, fontWeight: 'bold', marginBottom: 5 },
   episodeDesc: { color: THEME.textMuted, fontSize: 13 },

@@ -22,7 +22,7 @@ import Video from 'react-native-video';
 import MediaDetailScreen from './src/screens/MediaDetailScreen';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-[span_1](start_span)const TMDB_API_KEY = "b030404650f279792a8d3287232358e3";[span_1](end_span)
+const TMDB_API_KEY = "b030404650f279792a8d3287232358e3";
 
 const THEME = {
   bg: '#050B14',
@@ -30,16 +30,16 @@ const THEME = {
   primary: '#E50914',
   text: '#FFFFFF',
   textMuted: '#888888',
-[span_2](start_span)};[span_2](end_span)
+};
 
 // ==========================================
 // 1. PEMUTAR VIDEO (NETFLIX STYLE)
 // ==========================================
 const CustomVideoPlayer = ({ videoUrl, title, visible, onClose }: any) => {
-  [span_3](start_span)const [paused, setPaused] = useState(false);[span_3](end_span)
-  [span_4](start_span)const [showControls, setShowControls] = useState(true);[span_4](end_span)
+  const [paused, setPaused] = useState(false);
+  const [showControls, setShowControls] = useState(true);
 
-  [span_5](start_span)if (!visible || !videoUrl) return null;[span_5](end_span)
+  if (!visible || !videoUrl) return null;
 
   return (
     <Modal visible={visible} animationType="fade" transparent={false} onRequestClose={onClose}>
@@ -50,7 +50,7 @@ const CustomVideoPlayer = ({ videoUrl, title, visible, onClose }: any) => {
             style={StyleSheet.absoluteFill}
             paused={paused}
             resizeMode="contain" 
-          [span_6](start_span)/>[span_6](end_span)
+          />
         </TouchableOpacity>
 
         {showControls && (
@@ -58,14 +58,14 @@ const CustomVideoPlayer = ({ videoUrl, title, visible, onClose }: any) => {
             <SafeAreaView style={{ flexDirection: 'row', alignItems: 'center', padding: 20 }}>
               <TouchableOpacity onPress={onClose}>
                 <Icon name="arrow-back" size={28} color="#FFF" />
-              [span_7](start_span)</TouchableOpacity>[span_7](end_span)
+              </TouchableOpacity>
               <Text style={{ color: '#FFF', fontSize: 18, fontWeight: 'bold', marginLeft: 15 }}>{title}</Text>
             </SafeAreaView>
 
             <View style={{ alignSelf: 'center' }}>
               <TouchableOpacity onPress={() => setPaused(!paused)}>
                 <Icon name={paused ? "play" : "pause"} size={60} color="#FFF" />
-              [span_8](start_span)</TouchableOpacity>[span_8](end_span)
+              </TouchableOpacity>
             </View>
             <View style={{ height: 60 }} />
           </View>
@@ -73,19 +73,20 @@ const CustomVideoPlayer = ({ videoUrl, title, visible, onClose }: any) => {
       </View>
     </Modal>
   );
-[span_9](start_span)};[span_9](end_span)
+};
 
 // ==========================================
 // 2. BARIS FILM (MOVIE ROW)
 // ==========================================
 const MovieRow = ({ title, fetchUrl, onMoviePress }: any) => {
-  [span_10](start_span)const [movies, setMovies] = useState<any[]>([]);[span_10](end_span)
+  const [movies, setMovies] = useState<any[]>([]);
+  
   useEffect(() => { 
     fetch(fetchUrl)
       .then(r => r.json())
       .then(d => setMovies(d.results))
       .catch(e => console.error(e)); 
-  [span_11](start_span)}, [fetchUrl]);[span_11](end_span)
+  }, [fetchUrl]);
 
   if (movies.length === 0) return null;
 
@@ -101,11 +102,11 @@ const MovieRow = ({ title, fetchUrl, onMoviePress }: any) => {
               imageStyle={{ borderRadius: 4 }}
             />
           </TouchableOpacity>
-        [span_12](start_span)))}[span_12](end_span)
+        ))}
       </ScrollView>
     </View>
   );
-[span_13](start_span)};[span_13](end_span)
+};
 
 // ==========================================
 // 3. LAYAR BERANDA
@@ -122,7 +123,7 @@ const BerandaScreen = ({ onMoviePress }: any) => (
           <Icon name="play" size={20} color="#000" />
           <Text style={{ color: '#000', fontWeight: 'bold', marginLeft: 5 }}>Putar</Text>
         </TouchableOpacity>
-      [span_14](start_span)</View>[span_14](end_span)
+      </View>
     </ImageBackground>
 
     <MovieRow title="Sedang Tren" fetchUrl={`https://api.themoviedb.org/3/trending/all/week?api_key=${TMDB_API_KEY}`} onMoviePress={onMoviePress} />
@@ -134,10 +135,10 @@ const BerandaScreen = ({ onMoviePress }: any) => (
 // ==========================================
 // 4. MAIN APP COMPONENT
 // ==========================================
-[span_15](start_span)const Tab = createBottomTabNavigator();[span_15](end_span)
+const Tab = createBottomTabNavigator();
 
 export default function App() {
-  [span_16](start_span)const [selectedMedia, setSelectedMedia] = useState<any>(null);[span_16](end_span)
+  const [selectedMedia, setSelectedMedia] = useState<any>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoTitle, setVideoTitle] = useState("");
 
@@ -151,7 +152,7 @@ export default function App() {
       synopsis: media.overview,
       poster_path: `https://image.tmdb.org/t/p/w500${media.poster_path}`,
       backdrop_path: `https://image.tmdb.org/t/p/original${media.backdrop_path}`
-    [span_17](start_span)[span_18](start_span)[span_19](start_span)};[span_17](end_span)[span_18](end_span)[span_19](end_span)
+    };
     setSelectedMedia(detail);
   };
 
@@ -205,7 +206,7 @@ export default function App() {
       </NavigationContainer>
     </SafeAreaProvider>
   );
-[span_20](start_span)}
+}
 
 const styles = StyleSheet.create({
   sectionTitle: { color: THEME.text, fontSize: 18, fontWeight: 'bold', marginBottom: 15, marginLeft: 20 },
@@ -215,4 +216,4 @@ const styles = StyleSheet.create({
   bannerOverlay: { padding: 30, backgroundColor: 'rgba(5,11,20,0.6)' },
   bannerTitle: { color: '#FFF', fontSize: 32, fontWeight: '900', textAlign: 'center', marginBottom: 20 },
   btnPlayBanner: { backgroundColor: '#FFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 4 },
-});[span_20](end_span)
+});

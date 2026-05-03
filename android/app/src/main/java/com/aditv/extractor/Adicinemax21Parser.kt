@@ -1,4 +1,4 @@
-package com.Adicinemax21
+package com.aditv.extractor
 
 import com.fasterxml.jackson.annotation.JsonProperty
 

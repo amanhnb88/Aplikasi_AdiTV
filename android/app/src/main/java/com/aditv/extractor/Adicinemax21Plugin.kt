@@ -1,4 +1,4 @@
-package com.Adicinemax21
+package com.aditv.extractor
 
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin

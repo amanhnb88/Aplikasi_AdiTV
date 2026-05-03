@@ -1,4 +1,4 @@
-package com.Adicinemax21
+package com.aditv.extractor
 
 import android.util.Base64
 import com.Adicinemax21.Adicinemax21.Companion.anilistAPI
